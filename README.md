@@ -1,96 +1,68 @@
-<div align="center">
+# TikTok-Publisher-AdsPower
 
-# 📱 TikTok Publisher (AdsPower)
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 
-[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js&logoColor=white)](https://nodejs.org)
-[![Playwright](https://img.shields.io/badge/Playwright-CDP-2EAD33?style=flat-square&logo=playwright&logoColor=white)](https://playwright.dev)
-[![AdsPower](https://img.shields.io/badge/AdsPower-Browser-FF6B35?style=flat-square)](https://www.adspower.com)
-[![Lark](https://img.shields.io/badge/Lark-Bitable-00D6B9?style=flat-square&logo=bytedance&logoColor=white)](https://open.feishu.cn)
+> **Showcase** — ~15% skeleton. Core implementation not included.
 
-**TikTok automation toolkit — multi-account rotator (nurture) + Feishu-driven auto-publish via AdsPower & Playwright CDP**
+Two subsystems sharing one AdsPower browser account pool. The rotator warms up accounts by simulating organic TikTok browsing. The publisher reads video records from Feishu Bitable and uploads them via TikTok Studio. A cloud relay bridges Feishu HTTP calls to a Windows publishing host.
 
-> ⚠️ **Showcase Only** — ~15% skeleton. Anti-detection logic, account pool & cloud-relay glue not included.
+## Stack
 
-</div>
+- Node.js, TypeScript
+- Playwright (CDP via AdsPower)
+- AdsPower browser profile API
+- Feishu (Lark) Bitable API
 
----
+## Subsystems
 
-## ✨ Overview
+### Rotator
 
-Two coordinated subsystems share a single AdsPower-managed account pool:
+Opens AdsPower profiles on a schedule and simulates real user behavior: scroll feed, watch videos, like, pause. Keeps accounts warm between publish sessions.
 
-- **Rotator** — opens accounts on schedule, scrolls TikTok like a real user (warm-up / nurture)
-- **Publish** — reads video records from Feishu Bitable, uploads & publishes via TikTok Studio
+### Publisher
 
-A cloud relay server bridges Feishu automation HTTP calls to a Windows publishing host.
+Reads pending video records from a Feishu Bitable table, opens the corresponding AdsPower profile, navigates to TikTok Studio, and uploads the video with metadata. Marks the row as published on success.
 
----
+### Cloud Relay
 
-## 🏗️ Architecture
+A lightweight HTTP server deployed to a cloud VM. Feishu automations POST to it; it forwards requests over a persistent tunnel to the Windows host running Publisher.
 
-```
-   Feishu Bitable                Cloud Relay
-  ┌────────────────┐            ┌──────────────┐
-  │  video records │── HTTP ───►│  Queue API   │
-  │  + publish=Y   │            │  (Flask)     │
-  └────────────────┘            └──────┬───────┘
-                                       │ poll
-                                       ▼
-                          ┌─────────────────────────┐
-                          │   Windows Publisher     │
-                          │   ┌─────────────────┐   │
-                          │   │ Scheduler       │   │
-                          │   │ (Bull queue)    │   │
-                          │   └────────┬────────┘   │
-                          │            ▼            │
-                          │   ┌─────────────────┐   │
-                          │   │ AdsPower client │   │
-                          │   │ + Playwright    │   │
-                          │   └────────┬────────┘   │
-                          └────────────┼────────────┘
-                                       │
-                                       ▼
-                              TikTok Studio (upload)
-
-  Independently:
-  ┌──────────────┐      ┌──────────────────────┐
-  │ Cron daily   │─────►│ Rotator (nurture)    │
-  │              │      │ multi-account scroll │
-  └──────────────┘      └──────────────────────┘
-```
-
----
-
-## 📁 Structure
+## Architecture
 
 ```
-tiktok-publisher-adspower/
+Feishu Bitable
+    └── Cloud relay (cloud VM)
+         └── Tunnel → Windows host
+              └── Publisher (Node.js + Playwright CDP)
+                   └── AdsPower profile pool
+                        └── TikTok Studio upload
+```
+
+## Usage
+
+```bash
+npm install
+cp .env.example .env
+
+# Start the account rotator
+node dist/rotator.js
+
+# Start the publisher (Windows host)
+node dist/publisher.js
+
+# Start the cloud relay
+node dist/relay.js
+```
+
+## Structure
+
+```
+TikTok-Publisher-AdsPower/
 ├── src/
-│   ├── core/
-│   │   └── adspower.js          # AdsPower client (CDP bridge)
-│   ├── publish/
-│   │   └── scheduler.js         # Bull-queue publish scheduler
-│   ├── rotator/
-│   │   └── index.js             # Nurture rotator
-│   └── integrations/
-│       └── feishu.js            # Feishu Bitable client
-└── package.json
+│   ├── rotator/       # warm-up logic
+│   ├── publisher/     # TikTok Studio upload flow
+│   └── relay/         # cloud HTTP relay
+├── config/
+│   └── profiles.json  # AdsPower account list
+└── .env.example
 ```
-
----
-
-## 🔧 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Runtime | Node.js 18+ |
-| Browser | AdsPower → Playwright (via CDP) |
-| Queue | Bull + Redis |
-| Trigger | Feishu Bitable automation |
-| Cloud Relay | Flask (Python) on Singapore VPS |
-
----
-
-<div align="center">
-<sub>Showcase version · Anti-detection & account pool not included · For portfolio reference only</sub>
-</div>
